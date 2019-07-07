@@ -7,16 +7,17 @@
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "p2pjs.h"
 
-#ifndef P2PJS_FORKTOBACKGROUND
-  #define P2PJS_FORKTOBACKGROUND 1
-#endif
-
+#include "getlocalip.c"
 #include "logging.c"
 #include "messaging.c"
 #include "peer_handling.c"
+#include "jobs.c"
+#include "ui.c"
 
 #define DefaultPort "2096"
 
@@ -159,6 +160,20 @@ main(int argc, char **argv)
         return 1;
     }
 
+    // NOTE(Kevin): Init rand()
+    srand((unsigned int)time(0));
+
+    // NOTE(Kevin): Determine local ip address
+    char localIp[PeerIPLen];
+    if (GetLocalIPAddress(localIp, SizeofArray(localIp)) != kSuccess)
+    {
+        WriteToLog("Failed to determine local ip address.\n");
+        CloseLog();
+        return 1;
+    }
+
+    WriteToLog("Using %s as local ip.\n", localIp);
+
     int serverFd = OpenServerSocket(port);
     WriteToLog("Listening on %s\n", port);
     if (listen(serverFd, 5) == -1) {
@@ -204,6 +219,16 @@ main(int argc, char **argv)
         ConnectToPeer(ip, fpPort, port);
     }
 
+    if (!forkToBackground) {
+        if (StartUIThread() != kSuccess)
+        {
+            WriteToLog("Failed to start ui thread.\n");
+            close(serverFd);
+            CloseLog();
+            return 1;
+        }
+    }
+
     while (!g_shouldExit)
     {
         struct sockaddr_storage clientAddress;
@@ -234,26 +259,21 @@ main(int argc, char **argv)
         if (CheckPeerStatus(&readyPeers, &readyPeerCount,
                             &closedPeers, &closedPeerCount) == kSuccess)
         {
-            for (unsigned int i = 0; i < readyPeerCount; ++i) {
+            for (unsigned int i = 0; i < readyPeerCount; ++i)
+            {
                 WriteToLog("Incoming data from peer %d [%s].\n",
                            readyPeers[i].id,
                            GetPeerIP(readyPeers[i].id));
                 HandleMessageFromPeer(readyPeers[i].fd, readyPeers[i].id, port);
             } 
-            for (unsigned int i = 0; i < closedPeerCount; ++i) {
+            for (unsigned int i = 0; i < closedPeerCount; ++i)
+            {
                 WriteToLog("Peer %d [%s] has closed the connection.\n",
                            closedPeers[i].id,
                            GetPeerIP(closedPeers[i].id));
-#if 0
-                // TODO(Kevin): Need a way of TRYING to handle a message
-                if (closedPeers[i].hasIncomingData)
-                {
-                    WriteToLog("Handling leftover incoming data from peer %d [%s].\n",
-                               closedPeers[i].id, GetPeerIP(closedPeers[i].id));
-                    HandleMessageFromPeer(closedPeers[i].fd, closedPeers[i].id);
-                }
-#endif
-
+                // TODO(Kevin): Handle outstanding messages
+                // We need a way to TRY to handle messages, because
+                // the message might be incomplete
                 close(closedPeers[i].fd);
             }
             RemovePeers(closedPeers, closedPeerCount);
@@ -264,9 +284,44 @@ main(int argc, char **argv)
         {
             WriteToLog("CheckPeerStatus() failed.\n"); 
         }
+
+        if (!forkToBackground)
+        {
+            user_command *cmd = GetNextCommand();
+            if (cmd)
+            {
+                switch (cmd->type)
+                {
+                    case kJobCSource:
+                    {
+                        WriteToLog("CSOURCE COMMAND %s\n", cmd->cSource.path);
+                        int result = EmitCSourceJob(cmd->cSource.path,
+                                                    localIp, port);
+                        if (result == kCouldNotOpenFile)
+                        {
+                            printf("Could not read file %s\n", cmd->cSource.path);
+                        }
+                        else if (result == kNoMemory)
+                        {
+                            printf("Not enough memory!\n");
+                        }
+                    } break;
+
+                    default:
+                    {
+                        WriteToLog("Unknown command %d\n", cmd->type);
+                    } break;
+                }
+                FreeCommand(cmd);
+            }
+        } 
     }
 
     close(serverFd);
+    if (!forkToBackground)
+    {
+        StopUIThread();
+    }
     CloseLog();
 
     return 0;

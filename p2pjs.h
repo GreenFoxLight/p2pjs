@@ -49,7 +49,25 @@ enum
 
     // NOTE(Kevin): List of known peers
     kPeerList,
+
+    // NOTE(Kevin): Ask for job resources
+    kQueryJobResources,
+
+    // NOTE(Kevin): Reply to queryJobResources
+    kOfferJobResources,
 };
+
+// Job flags
+enum
+{
+    // NOTE(Kevin): The job is given as c source code
+    kJobCSource = 0x00000001,
+
+    // TODO(Kevin): Others?
+};
+
+// NOTE(Kevin): SHA-256 Hashes are 32 byte
+#define CookieLen 32
 
 typedef struct 
 {
@@ -68,6 +86,18 @@ typedef struct
             uint16 numberOfPeers;
             peer_info peers[1];
         } peerList;
+
+        struct
+        {
+            uint32      type; 
+            uint8       cookie[CookieLen];
+            peer_info   source;
+        } queryJobResources;
+
+        struct
+        {
+            uint8 cookie[CookieLen];
+        } offerJobResources;
     }; 
 } message;
 
@@ -87,6 +117,16 @@ enum
     kWouldBlock,
 
     kInvalidValue,
+
+    kNoAvailableInterface,
+    
+    kCouldNotOpenFile,
 };
+
+typedef struct
+{
+    int fd;
+    int id;
+} peer_iterator;
 
 #endif

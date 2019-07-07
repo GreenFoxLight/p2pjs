@@ -23,3 +23,7 @@ Ansonsten stehen folgende Parameter zur Verfügung:
 | `-f`      | First-Peer. IP-Adresse und Port des ersten Peers mit dem sich verbunden wird.
               Muss ein String der Form `ip:port` sein. Standard: Leer |
 | `-b`      | Fork-To-Background. Startet das Programm als Daemon im Hintergrund. Standard: Aus |
+
+## Benutzte Bibliotheken
+
+* sha-2: SHA-256 Implementierung (Public Domain) von: https://github.com/amosnier/sha-2

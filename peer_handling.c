@@ -27,6 +27,44 @@ global_variable peer_info *g_peerInfo;
 global_variable unsigned int g_peerCount;
 global_variable unsigned int g_peerCapacity;
 
+internal peer_iterator
+GetFirstPeer(void)
+{
+    if (g_peerCount == 0)
+    {
+        peer_iterator p = { .fd = 0, .id = -1 };
+        return p;
+    }
+    else
+    {
+        peer_iterator p = { .fd = g_peerFds[0].fd, .id = 0 };
+        return p;
+    }
+}
+
+internal void 
+GetNextPeer(peer_iterator *p)
+{
+    if (p->id == -1)
+    {
+        return;
+    }
+    else
+    {
+        ++p->id;
+        if (p->id < g_peerCount)
+            p->fd = g_peerFds[p->id].fd;
+        else
+            p->id = -1;
+    }
+}
+
+internal bool32
+IsBehindLastPeer(peer_iterator *p)
+{
+    return p->id == -1;
+}
+
 internal int 
 AddPeer(int fd, const char *ipAddress)
 {
@@ -213,7 +251,8 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
     {
         WriteToLog("Failed to open socket for peer connection.\n");
     }
-    WriteToLog("Established connection to %s: %s. Assigned id %d.\n", ip, port, peerId);
+    if (peerId != -1)
+        WriteToLog("Established connection to %s: %s. Assigned id %d.\n", ip, port, peerId);
     return peerId;
 }
 
@@ -291,6 +330,13 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
                         }
                     }
                 }
+            } break;
+
+            case kQueryJobResources:
+            {
+                WriteToLog("Received queryJobResources message from peer %d [%s].\n",
+                           id, GetPeerIP(id));
+                
             } break;
 
             default:
