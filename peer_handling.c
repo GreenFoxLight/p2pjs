@@ -284,6 +284,8 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
 
 internal int GetNumberOfRunningJobs(void);
 internal int SendJobToPeer(uint8 cookie[CookieLen], int peerFd);
+internal int TakeJob(uint8 cookie[CookieLen], job theJob, int peerId);
+internal const char* CookieToTemporaryString(uint8 cookie[CookieLen]);
 
 internal void
 HandleMessageFromPeer(int fd, int id, const char *myPort)
@@ -433,6 +435,18 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
             {
                 WriteToLog("Received job message from peer %d [%s].\n",
                            id, GetPeerIP(id));
+
+                WriteToLog("Job has cookie %s\n", CookieToTemporaryString(message->job.cookie));
+                job theJob = {
+                    .type = message->job.type,
+                    .cSource.source = message->job.cSource.source,
+                };
+
+                int err;
+                if ((err = TakeJob(message->job.cookie, theJob, id)) != kSuccess)
+                {
+                    WriteToLog("Failed to take job: %s\n", ErrorToString(err));
+                }
             } break;
 
             default:

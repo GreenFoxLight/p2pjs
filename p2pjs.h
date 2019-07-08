@@ -11,7 +11,7 @@
 #define Unused(V)       ((void)sizeof((V)))
 
 #ifndef P2PJS_MaxRunningJobs
-  #define P2PJS_MaxRunningJobs 4
+  #define P2PJS_MaxRunningJobs 1 
 #endif
 
 // NOTE(Kevin): LLP64; should be fine under Windows and most *nix
@@ -121,6 +121,13 @@ typedef struct
                 } cSource;
             };
         } job;
+
+        struct
+        {
+            uint8 cookie[CookieLen];
+            int   state;
+            int   result;
+        } jobResult;
     }; 
 } message;
 
@@ -146,24 +153,12 @@ enum
     kCouldNotOpenFile,
 
     kJobNotFound,
+
+    kCompileError,
+
+    kRuntimeError,
 };
 
-internal const char*
-ErrorToString(int error)
-{
-    local_persist const char *strings[] =
-    {
-        "Success",
-        "NoMemory",
-        "SyscallFailed",
-        "WouldBlock",
-        "InvalidValue",
-        "NoAvailableInterface",
-        "CouldNotOpenFile",
-        "JobNotFound"
-    }; 
-    return strings[error];
-}
 
 typedef struct
 {

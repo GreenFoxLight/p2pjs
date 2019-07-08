@@ -12,8 +12,28 @@
 
 #include "p2pjs.h"
 
+internal const char*
+ErrorToString(int error)
+{
+    local_persist const char *strings[] =
+    {
+        "Success",
+        "NoMemory",
+        "SyscallFailed",
+        "WouldBlock",
+        "InvalidValue",
+        "NoAvailableInterface",
+        "CouldNotOpenFile",
+        "JobNotFound",
+        "CompileError",
+        "RuntimeError"
+    }; 
+    return strings[error];
+}
+
 #include "getlocalip.c"
 #include "logging.c"
+#include "vm.c"
 #include "messaging.c"
 #include "peer_handling.c"
 #include "jobs.c"
@@ -315,6 +335,8 @@ main(int argc, char **argv)
                 FreeCommand(cmd);
             }
         } 
+    
+        ExecuteNextJob();
     }
 
     close(serverFd);
@@ -322,6 +344,7 @@ main(int argc, char **argv)
     {
         StopUIThread();
     }
+
     CloseLog();
 
     return 0;

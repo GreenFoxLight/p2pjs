@@ -17,7 +17,7 @@ enum
 typedef struct
 {
     uint8       cookie[CookieLen];
-    peer_info   source; 
+    int         source; 
     int         state;
     job         job;
 } received_job;
@@ -36,6 +36,20 @@ global_variable unsigned int g_receivedJobCount;
 global_variable unsigned int g_receivedJobCapacity;
 global_variable unsigned int g_emittedJobCount;
 global_variable unsigned int g_emittedJobCapacity;
+
+#define HexDigitToChar(D) (((D) >= 10) ? 'a' + ((D) - 10) : '0' + (D))
+internal const char*
+CookieToTemporaryString(uint8 cookie[CookieLen])
+{
+    local_persist char cookieString[2 * CookieLen + 1];
+    for (int i = 0; i < CookieLen; ++i)
+    {
+        cookieString[2 * i]     = HexDigitToChar(cookie[i] >> 4);
+        cookieString[2 * i + 1] = HexDigitToChar(cookie[i] & 0xf);
+    }
+    cookieString[2 * CookieLen] = '\0'; 
+    return cookieString;
+}
 
 internal int 
 EmitCSourceJob(const char *sourcePath,
@@ -82,11 +96,7 @@ EmitCSourceJob(const char *sourcePath,
     strncpy(info.ipaddr, myIp, PeerIPLen);
     strncpy(info.port, myPort, PeerPortLen);
 
-    for (int i = 0; i < CookieLen; ++i)
-    {
-        printf("%x", cookie[i]);
-    }
-    printf("\n");
+    WriteToLog("Created job %s\n", CookieToTemporaryString(cookie));
 
     // NOTE(Kevin): Send a message asking for compute resources
     for (peer_iterator peer = GetFirstPeer(); !IsBehindLastPeer(&peer); GetNextPeer(&peer))
@@ -152,4 +162,50 @@ GetNumberOfRunningJobs(void)
             ++count;
     }
     return count;
+}
+
+internal int 
+TakeJob(uint8 cookie[CookieLen], job theJob, int sourceId)
+{
+    if (g_receivedJobCount == g_receivedJobCapacity)
+    {
+        unsigned int newCapacity = (g_receivedJobCapacity == 0) ? 8 : 2 * g_receivedJobCapacity;
+        received_job *t = realloc(g_receivedJobs, sizeof(received_job) * newCapacity);
+        if (!t)
+            return kNoMemory;
+        g_receivedJobs = t;
+        g_receivedJobCapacity = newCapacity;
+    }
+    memcpy(g_receivedJobs[g_receivedJobCount].cookie, cookie, CookieLen);
+    g_receivedJobs[g_receivedJobCount].source = sourceId;
+    g_receivedJobs[g_receivedJobCount].state  = kStateRunning;
+    g_receivedJobs[g_receivedJobCount].job    = theJob;
+    if (theJob.type == kJobCSource)
+    {
+        char *source = malloc(strlen(theJob.cSource.source) + 1);
+        if (!source)
+        {
+            return kNoMemory;
+        } 
+        strcpy(source, theJob.cSource.source);
+        g_receivedJobs[g_receivedJobCount].job.cSource.source = source;
+    }
+    ++g_receivedJobCount;
+    return kSuccess;
+}
+
+internal void
+ExecuteNextJob(void)
+{
+    int idx = (int)g_receivedJobCount - 1;
+    if (idx >= 0)
+    {
+        WriteToLog("Running job: %s\n", CookieToTemporaryString(g_receivedJobs[idx].cookie));
+
+        int result = RunCode(g_receivedJobs[idx].cookie, g_receivedJobs[idx].job.cSource.source);
+        WriteToLog("Result: %s\n", ErrorToString(result));
+
+        g_receivedJobs[idx].state = kStateFinished;
+        --g_receivedJobCount;
+    }
 }

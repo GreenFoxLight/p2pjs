@@ -273,6 +273,7 @@ ReceiveMessage(int fd, message **messageOut)
                     message *msg = malloc(sizeof(message));
                     msg->type                   = kJob;
                     msg->job.type               = jobType;
+                    memcpy(msg->job.cookie, cookie, CookieLen);
                     msg->job.cSource.sourceLen  = sourceLen;
                     msg->job.cSource.source     = source;
                     *messageOut = msg;
