@@ -10,6 +10,10 @@
 #define SizeofArray(A)  (sizeof((A))/sizeof((A)[0]))
 #define Unused(V)       ((void)sizeof((V)))
 
+#ifndef P2PJS_MaxRunningJobs
+  #define P2PJS_MaxRunningJobs 4
+#endif
+
 // NOTE(Kevin): LLP64; should be fine under Windows and most *nix
 typedef unsigned char       uint8;
 typedef unsigned short      uint16;
@@ -55,6 +59,11 @@ enum
 
     // NOTE(Kevin): Reply to queryJobResources
     kOfferJobResources,
+
+    // NOTE(Kevin): Transmit a job
+    kJob,
+
+    kJobResult,
 };
 
 // Job flags
@@ -98,6 +107,20 @@ typedef struct
         {
             uint8 cookie[CookieLen];
         } offerJobResources;
+
+        struct
+        {
+            uint8 cookie[CookieLen];
+            uint32 type;
+            union
+            {
+                struct
+                {
+                    uint32 sourceLen;
+                    char   *source;
+                } cSource;
+            };
+        } job;
     }; 
 } message;
 
@@ -121,12 +144,43 @@ enum
     kNoAvailableInterface,
     
     kCouldNotOpenFile,
+
+    kJobNotFound,
 };
+
+internal const char*
+ErrorToString(int error)
+{
+    local_persist const char *strings[] =
+    {
+        "Success",
+        "NoMemory",
+        "SyscallFailed",
+        "WouldBlock",
+        "InvalidValue",
+        "NoAvailableInterface",
+        "CouldNotOpenFile",
+        "JobNotFound"
+    }; 
+    return strings[error];
+}
 
 typedef struct
 {
     int fd;
     int id;
 } peer_iterator;
+
+typedef struct
+{
+    uint32 type;
+    union
+    {
+        struct
+        {
+            const char *source;
+        } cSource;
+    };
+} job;
 
 #endif

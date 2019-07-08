@@ -14,22 +14,19 @@ enum
     kStateFinished,
 };
 
-typedef struct {
+typedef struct
+{
     uint8       cookie[CookieLen];
     peer_info   source; 
+    int         state;
+    job         job;
 } received_job;
 
-typedef struct {
+typedef struct
+{
     uint8       cookie[CookieLen];
     int         state; 
-    uint32      type;
-    union
-    {
-        struct
-        {
-            const char *source;
-        } cSource;
-    };
+    job         job;
 } emitted_job;
 
 global_variable received_job *g_receivedJobs;
@@ -73,6 +70,7 @@ EmitCSourceJob(const char *sourcePath,
             sourceCapacity *= 2;
         }
     }
+    source[sourceLength] = '\0';
     fclose(file);
 
     // NOTE(Kevin): Generate a random cookie
@@ -83,6 +81,12 @@ EmitCSourceJob(const char *sourcePath,
     peer_info info;
     strncpy(info.ipaddr, myIp, PeerIPLen);
     strncpy(info.port, myPort, PeerPortLen);
+
+    for (int i = 0; i < CookieLen; ++i)
+    {
+        printf("%x", cookie[i]);
+    }
+    printf("\n");
 
     // NOTE(Kevin): Send a message asking for compute resources
     for (peer_iterator peer = GetFirstPeer(); !IsBehindLastPeer(&peer); GetNextPeer(&peer))
@@ -110,7 +114,42 @@ EmitCSourceJob(const char *sourcePath,
     }
     memcpy(g_emittedJobs[g_emittedJobCount].cookie, cookie, CookieLen);
     g_emittedJobs[g_emittedJobCount].state = kStateQuerySent;
-    g_emittedJobs[g_emittedJobCount].type = kJobCSource;
-    g_emittedJobs[g_emittedJobCount].cSource.source = source;
+    g_emittedJobs[g_emittedJobCount].job.type = kJobCSource;
+    g_emittedJobs[g_emittedJobCount].job.cSource.source = source;
+    ++g_emittedJobCount;
     return kSuccess;
+}
+
+internal int
+SendJobToPeer(uint8 cookie[CookieLen], int peerFd)
+{
+    for (unsigned int i = 0; i < g_emittedJobCount; ++i)
+    {
+        if (memcmp(g_emittedJobs[i].cookie, cookie, CookieLen) == 0)
+        {
+            // NOTE(Kevin): Only send the job out if it's not already running
+            if (g_emittedJobs[i].state == kStateQuerySent)
+            {
+                int err = SendJob(peerFd, cookie, &g_emittedJobs[i].job); 
+                if (err != kSuccess)
+                {
+                    WriteToLog("SendJob: %d\n", ErrorToString(err));
+                }
+                return err;
+            }
+        }
+    }
+    return kJobNotFound;
+}
+
+internal int
+GetNumberOfRunningJobs(void)
+{
+    int count = 0;
+    for (unsigned int i = 0; i < g_receivedJobCount; ++i)
+    {
+        if (g_receivedJobs[i].state == kStateRunning)
+            ++count;
+    }
+    return count;
 }

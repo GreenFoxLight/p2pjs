@@ -52,7 +52,7 @@ GetNextPeer(peer_iterator *p)
     else
     {
         ++p->id;
-        if (p->id < g_peerCount)
+        if (p->id < (int)g_peerCount)
             p->fd = g_peerFds[p->id].fd;
         else
             p->id = -1;
@@ -131,11 +131,36 @@ GetPeerIP(int peerId)
 }
 
 internal int
+AreIPAddressesEqual(const char *a, const char *b)
+{
+    if (strcmp(a, b) == 0)
+        return 1;
+    unsigned int prefixLen = strlen("::ffff:");
+    if (strlen(a) >= prefixLen)
+    {
+        if (strncmp(a, "::ffff:", prefixLen) == 0)
+        {
+            return strcmp(&a[prefixLen], b) == 0;
+        }
+    }
+    if (strlen(b) >= prefixLen)
+    {
+        if (strncmp(b, "::ffff:", prefixLen) == 0)
+        {
+            return strcmp(a, &b[prefixLen]) == 0;
+        }
+    }
+    return 0;
+}
+
+internal int
 CheckForPeer(const char *ip, const char *port)
 {
     for (unsigned int i = 0; i < g_peerCount; ++i)
     {
-        if (strcmp(g_peerInfo[i].ipaddr, ip) == 0 &&
+        // NOTE(Kevin): IPv4 addresses are (sometimes) written
+        // as IPv6 addresses ::ffff:<ADDR>
+        if (AreIPAddressesEqual(g_peerInfo[i].ipaddr, ip) &&
             strcmp(g_peerInfo[i].port, port) == 0)
         {
             return (int)i;
@@ -222,7 +247,7 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
                 UpdatePeerPort(peerId, port);
                 if (SendHello(peerFd, myPort) != kSuccess)
                 {
-                    WriteToLog("Failed to send hello message to peer %s:%s.\n", ip, port);
+                    WriteToLog("Failed to send hello message to peer %s : %s.\n", ip, port);
                     close(peerFd);
                     closed_peer forceClose;
                     forceClose.fd = peerFd;
@@ -232,7 +257,7 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
 
                 if (SendGetPeers(peerFd) != kSuccess)
                 {
-                    WriteToLog("Failed to send getPeers message to peer %s:%s.\n", ip, port);
+                    WriteToLog("Failed to send getPeers message to peer %s : %s.\n", ip, port);
                     close(peerFd);
                     closed_peer forceClose;
                     forceClose.fd = peerFd;
@@ -243,7 +268,8 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
         }
         else
         {
-            WriteToLog("Failed to connect to first peer.\n");
+            perror("Connect: ");
+            WriteToLog("Failed to connect to peer %s : %s.\n", ip, port);
             close(peerFd);
         }
     }
@@ -255,6 +281,9 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
         WriteToLog("Established connection to %s: %s. Assigned id %d.\n", ip, port, peerId);
     return peerId;
 }
+
+internal int GetNumberOfRunningJobs(void);
+internal int SendJobToPeer(uint8 cookie[CookieLen], int peerFd);
 
 internal void
 HandleMessageFromPeer(int fd, int id, const char *myPort)
@@ -336,7 +365,74 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
             {
                 WriteToLog("Received queryJobResources message from peer %d [%s].\n",
                            id, GetPeerIP(id));
-                
+                // NOTE(Kevin): Decide if we want to take the job
+
+                if (GetNumberOfRunningJobs() < P2PJS_MaxRunningJobs)
+                {
+                    WriteToLog("Offering to take the job.\n");
+                    // NOTE(Kevin): Offer to take the job
+                    int id = CheckForPeer(message->queryJobResources.source.ipaddr,
+                                          message->queryJobResources.source.port);
+                    if (id == -1)
+                    {
+                        WriteToLog("Attempting to connect to source %s %s.\n",
+                                   message->queryJobResources.source.ipaddr,
+                                   message->queryJobResources.source.port);
+                        // NOTE(Kevin): New peer
+                        id = ConnectToPeer(message->queryJobResources.source.ipaddr,
+                                           message->queryJobResources.source.port,
+                                           myPort);
+                        if (id == -1)
+                        {
+                            WriteToLog("Failed to connect to peer %s %s\n",
+                                       message->queryJobResources.source.ipaddr,
+                                       message->queryJobResources.source.port);
+                        }
+                    }
+                    if (id > -1)
+                    {
+                        int fd = g_peerFds[id].fd;
+                        if (SendOfferJobResources(fd, message->queryJobResources.cookie) != kSuccess)
+                        {
+                            WriteToLog("Failed to send offer.\n");
+                        }
+                    }
+                }
+                else
+                {
+                    // NOTE(Kevin): Spread the message
+                    for (peer_iterator peer = GetFirstPeer();
+                         !IsBehindLastPeer(&peer);
+                         GetNextPeer(&peer))
+                    {
+                        if (peer.id == id)
+                            continue;
+                        WriteToLog("Spreading to peer %d [%s].\n",
+                                   peer.id, GetPeerIP(peer.id));
+                        SendQueryJobResources(peer.fd,
+                                              message->queryJobResources.type,
+                                              message->queryJobResources.cookie,
+                                              message->queryJobResources.source);
+                    }
+                }
+            } break;
+
+            case kOfferJobResources:
+            {
+                WriteToLog("Received offerJobResources message from peer %d [%s].\n",
+                           id, GetPeerIP(id));
+                WriteToLog("Sending job to peer %d [%s].\n", id, GetPeerIP(id)); 
+                int err;
+                if ((err = SendJobToPeer(message->offerJobResources.cookie, fd)) != kSuccess)
+                {
+                    WriteToLog("Failed: %s\n", ErrorToString(err));
+                }
+            } break;
+
+            case kJob:
+            {
+                WriteToLog("Received job message from peer %d [%s].\n",
+                           id, GetPeerIP(id));
             } break;
 
             default:
@@ -345,7 +441,10 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
                            id, GetPeerIP(id), message->type);
             } break;
         }
-
-        free(message);
+        FreeMessage(message);
+    }
+    else
+    {
+        WriteToLog("Receive message failed.\n");
     }
 }

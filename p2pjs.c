@@ -125,7 +125,7 @@ main(int argc, char **argv)
             } break;
             case '?':
             {
-                printf("Usage: %s [-p port] [-f ip:port] [-b]\n", argv[0]);
+                printf("Usage: %s [-p port] [-f ip#port] [-b]\n", argv[0]);
                 return 1;
             }
         }
@@ -189,18 +189,18 @@ main(int argc, char **argv)
         char *ip = firstPeer;
         char *fpPort = firstPeer;
         // TODO(Kevin): Check for malformed input
-        if (*ip == ':')
+        if (*ip == '#')
         {
-            printf("Expected ip:port\n");
+            printf("Expected ip#port\n");
             close(serverFd);
             CloseLog();
             return 1;
         }
-        while (*fpPort != ':')
+        while (*fpPort != '#')
         {
             if (*fpPort == '\0')
             {
-                printf("Expected ip:port\n");
+                printf("Expected ip#port\n");
                 close(serverFd);
                 CloseLog();
                 return 1;
@@ -211,7 +211,7 @@ main(int argc, char **argv)
         ++fpPort;
         if (*fpPort == '\0')
         {
-            printf("Expected ip:port\n");
+            printf("Expected ip#port\n");
             close(serverFd);
             CloseLog();
             return 1;

@@ -57,7 +57,7 @@ SendGetPeers(int fd)
 }
 
 internal int
-SendQueryJobResources(int fd, uint32 jobType, uint8 cookie[32], peer_info info)
+SendQueryJobResources(int fd, uint32 jobType, uint8 cookie[CookieLen], peer_info info)
 {
     uint16 messageType = kQueryJobResources;
     if (SendBytes(fd, sizeof(messageType), (const char*)&messageType) != kSuccess)
@@ -67,6 +67,52 @@ SendQueryJobResources(int fd, uint32 jobType, uint8 cookie[32], peer_info info)
     if (SendBytes(fd, CookieLen, (const char*)cookie) != kSuccess)
         return kSyscallFailed;
     return SendBytes(fd, sizeof(info), (const char*)&info);
+}
+
+internal int
+SendOfferJobResources(int fd, uint8 cookie[CookieLen])
+{
+    uint16 messageType = kOfferJobResources;
+    if (SendBytes(fd, sizeof(messageType), (const char*)&messageType) != kSuccess)
+        return kSyscallFailed;
+    return SendBytes(fd, CookieLen, (const char*)cookie);
+}
+
+internal int
+SendJob(int fd, uint8 cookie[CookieLen], const job *job)
+{
+    uint16 messageType = kJob;
+    if (SendBytes(fd, sizeof(messageType), (const char*)&messageType) != kSuccess)
+    {
+        perror("messageType");
+        return kSyscallFailed;
+    }
+    if (SendBytes(fd, CookieLen, (const char*)cookie) != kSuccess)
+    {
+        perror("cookie");
+        return kSyscallFailed;
+    }
+    if (SendBytes(fd, sizeof(job->type), (const char*)&job->type) != kSuccess)
+    {
+        perror("jobType");
+        return kSyscallFailed;
+    }
+    if (job->type == kJobCSource)
+    {
+        uint32 sourceLen = strlen(job->cSource.source) + 1;
+        if (SendBytes(fd, sizeof(sourceLen), (const char*)&sourceLen) != kSuccess)
+        {
+            perror("sourceLen");
+            return kSyscallFailed;
+        }
+        if (SendBytes(fd, sourceLen, job->cSource.source) != kSuccess)
+        {
+            perror("source");
+            return kSyscallFailed;
+        }
+        return kSuccess;
+    }
+    return kInvalidValue; 
 }
 
 internal int 
@@ -85,6 +131,17 @@ ReceiveBytes(int fd, int byteCount, char *buffer)
         buffer += did;
     }
     return kSuccess;
+}
+
+internal void
+FreeMessage(message *message)
+{
+    if (message->type == kJob)
+    {
+        if (message->job.type == kJobCSource)
+            free(message->job.cSource.source);
+    }
+    free(message);
 }
 
 internal int 
@@ -180,6 +237,52 @@ ReceiveMessage(int fd, message **messageOut)
 
         case kOfferJobResources:
         {
+            uint8 cookie[CookieLen];
+            if (ReceiveBytes(fd, CookieLen, (char*)cookie) != kSuccess)
+                return kSyscallFailed;
+            message *msg = malloc(sizeof(message));
+            msg->type = kOfferJobResources;
+            memcpy(&msg->offerJobResources.cookie[0], cookie, CookieLen);
+            *messageOut = msg;
+        } break;
+
+        case kJob:
+        {
+            uint8 cookie[CookieLen];
+            if (ReceiveBytes(fd, CookieLen, (char*)cookie) != kSuccess)
+                return kSyscallFailed;
+            uint32 jobType;
+            if (ReceiveBytes(fd, sizeof(uint32), (char*)&jobType) != kSuccess)
+                return kSyscallFailed; 
+            switch (jobType)
+            {
+                case kJobCSource:
+                {
+                    uint32 sourceLen = 0;
+                    if (ReceiveBytes(fd, sizeof(uint32), (char*)&sourceLen) != kSuccess)
+                        return kSyscallFailed;
+                    printf("Source len: %d\n", sourceLen);
+                    char *source = malloc(sourceLen);
+                    if (!source)
+                        return kNoMemory;
+                    if (ReceiveBytes(fd, sourceLen, source) != kSuccess)
+                    {
+                        free(source);
+                        return kSyscallFailed;
+                    }
+                    message *msg = malloc(sizeof(message));
+                    msg->type                   = kJob;
+                    msg->job.type               = jobType;
+                    msg->job.cSource.sourceLen  = sourceLen;
+                    msg->job.cSource.source     = source;
+                    *messageOut = msg;
+                } break;
+                
+                default:
+                {
+                    return kInvalidValue;
+                } break;
+            }
         } break;
     }
 
