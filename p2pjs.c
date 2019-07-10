@@ -174,6 +174,7 @@ main(int argc, char **argv)
     memset(&act, 0, sizeof(act));
     act.sa_handler = OnExit;
     sigaction(SIGTERM, &act, 0);
+    sigaction(SIGINT, &act, 0);
 
     if (!OpenLog()) {
         fprintf(stderr, "Failed to open log file.\n");
@@ -312,10 +313,11 @@ main(int argc, char **argv)
             {
                 switch (cmd->type)
                 {
-                    case kJobCSource:
+                    case kCmdJobCSource:
                     {
                         WriteToLog("CSOURCE COMMAND %s\n", cmd->cSource.path);
                         int result = EmitCSourceJob(cmd->cSource.path,
+                                                    cmd->cSource.arg,
                                                     localIp, port);
                         if (result == kCouldNotOpenFile)
                         {
@@ -325,6 +327,11 @@ main(int argc, char **argv)
                         {
                             printf("Not enough memory!\n");
                         }
+                    } break;
+
+                    case kCmdQuit:
+                    {
+                        g_shouldExit = 1;
                     } break;
 
                     default:

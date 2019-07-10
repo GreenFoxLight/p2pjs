@@ -63,7 +63,16 @@ enum
     // NOTE(Kevin): Transmit a job
     kJob,
 
+    // NOTE(Kevin): Transmit a job result
     kJobResult,
+};
+
+// Commands
+enum
+{
+    kCmdJobCSource,
+
+    kCmdQuit,
 };
 
 // Job flags
@@ -116,6 +125,7 @@ typedef struct
             {
                 struct
                 {
+                    double arg;
                     uint32 sourceLen;
                     char   *source;
                 } cSource;
@@ -126,7 +136,7 @@ typedef struct
         {
             uint8 cookie[CookieLen];
             int   state;
-            int   result;
+            double result;
         } jobResult;
     }; 
 } message;
@@ -174,6 +184,7 @@ typedef struct
         struct
         {
             const char *source;
+            double arg;
         } cSource;
     };
 } job;

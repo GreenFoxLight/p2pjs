@@ -131,6 +131,14 @@ GetPeerIP(int peerId)
 }
 
 internal int
+GetPeerFd(int id)
+{
+    if (id < (int)g_peerCount)
+        return g_peerFds[id].fd;
+    return -1;
+}
+
+internal int
 AreIPAddressesEqual(const char *a, const char *b)
 {
     if (strcmp(a, b) == 0)
@@ -286,6 +294,7 @@ internal int GetNumberOfRunningJobs(void);
 internal int SendJobToPeer(uint8 cookie[CookieLen], int peerFd);
 internal int TakeJob(uint8 cookie[CookieLen], job theJob, int peerId);
 internal const char* CookieToTemporaryString(uint8 cookie[CookieLen]);
+internal int StoreJobResult(uint8 cookie[CookieLen], int state, double result);
 
 internal void
 HandleMessageFromPeer(int fd, int id, const char *myPort)
@@ -438,15 +447,28 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
 
                 WriteToLog("Job has cookie %s\n", CookieToTemporaryString(message->job.cookie));
                 job theJob = {
-                    .type = message->job.type,
+                    .type           = message->job.type,
                     .cSource.source = message->job.cSource.source,
+                    .cSource.arg    = message->job.cSource.arg,
                 };
+                printf("%d\n", message->job.cSource.sourceLen);
+                printf("%c\n", theJob.cSource.source[0]);
+                printf("%s\n", theJob.cSource.source);
 
                 int err;
                 if ((err = TakeJob(message->job.cookie, theJob, id)) != kSuccess)
                 {
                     WriteToLog("Failed to take job: %s\n", ErrorToString(err));
                 }
+            } break;
+
+            case kJobResult:
+            {
+                WriteToLog("Received jobResult message from peer %d [%s].\n",
+                           id, GetPeerIP(id));
+                WriteToLog("Result is for job %s\n",
+                           CookieToTemporaryString(message->jobResult.cookie));
+                StoreJobResult(message->jobResult.cookie, message->jobResult.state, message->jobResult.result);
             } break;
 
             default:

@@ -3,8 +3,21 @@
 
 #include "p2pjs.h"
 
-global_variable WrenVM *g_vm;
 global_variable uint8 g_currentCookie[CookieLen];
+global_variable double g_jobResult;
+
+internal void
+SetResult(WrenVM *vm)
+{
+    printf("SetResult(%lf)\n", wrenGetSlotDouble(vm, 1));
+    g_jobResult = wrenGetSlotDouble(vm, 1);
+}
+
+internal double
+GetLastResult(void)
+{
+    return g_jobResult;
+}
 
 internal char* 
 LoadModule(WrenVM *vm, const char *name)
@@ -39,19 +52,23 @@ LoadModule(WrenVM *vm, const char *name)
     FILE *file = fopen(path, "r");
     while (!feof(file))
     {
-        if (sourceLength == sourceCapacity)
+        int c = fgetc(file);
+        if (c != EOF)
         {
-            char *t = realloc(source, 2 * sourceCapacity);
-            if (!t)
+            source[sourceLength++] = (char)c; 
+            if (sourceLength == sourceCapacity)
             {
-                free(source);
-                free(path);
-                return 0;
+                char *t = realloc(source, 2 * sourceCapacity);
+                if (!t)
+                {
+                    free(source);
+                    free(path);
+                    return 0;
+                }
+                source = t;
+                sourceCapacity *= 2;
             }
-            source = t;
-            sourceCapacity *= 2;
         }
-        source[sourceLength++] = fgetc(file);
     }
     source[sourceLength] = '\0';
     fclose(file);
@@ -96,40 +113,63 @@ ScriptError(WrenVM* vm,
     }
 }
 
+internal WrenForeignMethodFn
+BindForeignMethod(WrenVM *vm,
+                  const char *module,
+                  const char *class,
+                  bool isStatic,
+                  const char *signature)
+{
+    Unused(vm);
+    Unused(isStatic);
+    if (strcmp(module, "p2pjs") == 0)
+    {
+        if (strcmp(class, "Interface") == 0)
+        {
+            if (strcmp(signature, "setResult(_)") == 0)
+            {
+                return SetResult;
+            }
+        }
+    }
+    return 0;
+}
+
 internal int 
-RunCode(uint8 cookie[CookieLen], const char *source)
+RunCode(uint8 cookie[CookieLen], double arg, const char *source)
 {
     WrenConfiguration config;
     wrenInitConfiguration(&config);
     config.loadModuleFn = LoadModule;
     config.writeFn      = ScriptOutput;
     config.errorFn      = ScriptError;
+    config.bindForeignMethodFn = BindForeignMethod;
 
-    g_vm = wrenNewVM(&config);
+    WrenVM *vm = wrenNewVM(&config);
     memcpy(g_currentCookie, cookie, CookieLen);
-    // FIXME(Kevin): Figure out, where that weird extra byte comes from
-    WrenInterpretResult result = wrenInterpret(g_vm,
+    WrenInterpretResult result = wrenInterpret(vm,
                                                CookieToTemporaryString(cookie), 
-                                               &source[1]);
+                                               source);
     if (result == WREN_RESULT_COMPILE_ERROR)
         return kCompileError;
     else if (result == WREN_RESULT_RUNTIME_ERROR)
         return kRuntimeError;
 
+    WrenHandle *runSignature = wrenMakeCallHandle(vm, "run(_)");
 
-    WrenHandle *runSignature = wrenMakeCallHandle(g_vm, "Run()");
+    wrenEnsureSlots(vm, 1);
+    wrenGetVariable(vm, CookieToTemporaryString(cookie), "Job", 0);
+    WrenHandle *jobClass = wrenGetSlotHandle(vm, 0);
 
-    wrenEnsureSlots(g_vm, 1);
-    wrenGetVariable(g_vm, CookieToTemporaryString(cookie), "job", 0);
-    WrenHandle *jobClass = wrenGetSlotHandle(g_vm, 0);
+    wrenEnsureSlots(vm, 2);
+    wrenSetSlotHandle(vm, 0, jobClass);
+    wrenSetSlotDouble(vm, 1, arg);
+    result = wrenCall(vm, runSignature);
 
-    wrenSetSlotHandle(g_vm, 0, jobClass);
-    result = wrenCall(g_vm, runSignature);
+    wrenReleaseHandle(vm, jobClass);
+    wrenReleaseHandle(vm, runSignature);
 
-    wrenReleaseHandle(g_vm, jobClass);
-    wrenReleaseHandle(g_vm, runSignature);
-
-    wrenFreeVM(g_vm);
+    wrenFreeVM(vm);
 
     if (result == WREN_RESULT_SUCCESS)
         return kSuccess;

@@ -1,9 +1,5 @@
 #include <stdio.h>
 #include <pthread.h>
-#ifdef __STDC_NO_ATOMICS__
-  #error Your Compiler does not support C11 atomics
-#endif
-#include <stdatomic.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -17,6 +13,7 @@ typedef struct user_command
         struct
         {
             char *path;
+            double arg;
         } cSource;
     };
 
@@ -24,7 +21,6 @@ typedef struct user_command
 } user_command;
 
 global_variable pthread_mutex_t g_commandLock = PTHREAD_MUTEX_INITIALIZER;
-global_variable _Atomic int g_uiThreadShouldExit;
 global_variable pthread_t g_uiThread;
 
 global_variable user_command *g_userCommandList;
@@ -46,7 +42,7 @@ GetNextCommand(void)
 internal void
 FreeCommand(user_command *cmd)
 {
-    if (cmd->type == kJobCSource)
+    if (cmd->type == kCmdJobCSource)
     {
         free(cmd->cSource.path);
     }
@@ -56,7 +52,6 @@ FreeCommand(user_command *cmd)
 internal int 
 StartUIThread(void)
 {
-    atomic_store(&g_uiThreadShouldExit, 0); 
     int r = pthread_create(&g_uiThread, 0, UIThread, 0);
     if (r == 0)
         return kSuccess;
@@ -66,8 +61,7 @@ StartUIThread(void)
 internal void 
 StopUIThread(void)
 {
-    atomic_store(&g_uiThreadShouldExit, 1);
-    pthread_join(g_uiThread, 0);
+    pthread_kill(g_uiThread, SIGTERM);
 }
 
 internal void*
@@ -75,27 +69,28 @@ UIThread(void* _threadParam)
 {
     Unused(_threadParam);
 
-    int shouldExit = atomic_load(&g_uiThreadShouldExit);
-    while (!shouldExit)
+    while (1)
     {
-        shouldExit = atomic_load(&g_uiThreadShouldExit);
-
         // BAD_DESIGN(Kevin): This is super simplistic
         char command[80];
-        char param[240];
-        scanf("%s %s", command, param);
+        scanf("%s", command);
 
-        if (strcmp(command, "csource") == 0)
+        if (strcmp(command, "job") == 0)
         {
+            char path[240];
+            scanf("%s", path);
+            double arg;
+            scanf("%lf", &arg);
             pthread_mutex_lock(&g_commandLock);
             user_command *cmd = malloc(sizeof(user_command));
             if (cmd)
             {
-                cmd->type = kJobCSource;
-                cmd->cSource.path = malloc(strlen(param) + 1);
+                cmd->type = kCmdJobCSource;
+                cmd->cSource.path = malloc(strlen(path) + 1);
                 if (cmd->cSource.path)
                 {
-                    strcpy(cmd->cSource.path, param);
+                    strcpy(cmd->cSource.path, path);
+                    cmd->cSource.arg = arg;
                     cmd->next = g_userCommandList;
                     g_userCommandList = cmd;
                 }
@@ -106,11 +101,24 @@ UIThread(void* _threadParam)
             } 
             pthread_mutex_unlock(&g_commandLock);
         }
+        else if (strcmp(command, "quit") == 0)
+        {
+            pthread_mutex_lock(&g_commandLock);
+            user_command *cmd = malloc(sizeof(user_command));
+            if (cmd)
+            {
+                cmd->type = kCmdQuit;
+                cmd->next = g_userCommandList;
+                g_userCommandList = cmd;
+            } 
+            pthread_mutex_unlock(&g_commandLock);
+        }
         else
         {
             printf("Unknown command %s\n", command); 
         }
     } 
+    printf("UI Thread Exited!\n");
 
     return 0;
 }

@@ -99,6 +99,11 @@ SendJob(int fd, uint8 cookie[CookieLen], const job *job)
     }
     if (job->type == kJobCSource)
     {
+        if (SendBytes(fd, sizeof(double), (const char*)&job->cSource.arg) != kSuccess)
+        {
+            perror("arg");
+            return kSyscallFailed;
+        }
         uint32 sourceLen = strlen(job->cSource.source) + 1;
         if (SendBytes(fd, sizeof(sourceLen), (const char*)&sourceLen) != kSuccess)
         {
@@ -113,6 +118,33 @@ SendJob(int fd, uint8 cookie[CookieLen], const job *job)
         return kSuccess;
     }
     return kInvalidValue; 
+}
+
+internal int
+SendJobResult(int fd, uint8 cookie[CookieLen], int state, double result)
+{
+    uint16 messageType = kJobResult; 
+    if (SendBytes(fd, sizeof(messageType), (const char*)&messageType) != kSuccess)
+    {
+        perror("messageType");
+        return kSyscallFailed;
+    }
+    if (SendBytes(fd, CookieLen, (const char*)cookie) != kSuccess)
+    {
+        perror("cookie");
+        return kSyscallFailed;
+    }
+    if (SendBytes(fd, sizeof(int), (const char*)&state) != kSuccess)
+    {
+        perror("state");
+        return kSyscallFailed;
+    }
+    if (SendBytes(fd, sizeof(double), (const char*)&result) != kSuccess)
+    {
+        perror("result");
+        return kSyscallFailed;
+    }
+    return kSuccess;
 }
 
 internal int 
@@ -258,6 +290,9 @@ ReceiveMessage(int fd, message **messageOut)
             {
                 case kJobCSource:
                 {
+                    double arg;
+                    if (ReceiveBytes(fd, sizeof(double), (char*)&arg) != kSuccess)
+                        return kSyscallFailed;
                     uint32 sourceLen = 0;
                     if (ReceiveBytes(fd, sizeof(uint32), (char*)&sourceLen) != kSuccess)
                         return kSyscallFailed;
@@ -274,16 +309,37 @@ ReceiveMessage(int fd, message **messageOut)
                     msg->type                   = kJob;
                     msg->job.type               = jobType;
                     memcpy(msg->job.cookie, cookie, CookieLen);
+                    msg->job.cSource.arg        = arg;
                     msg->job.cSource.sourceLen  = sourceLen;
                     msg->job.cSource.source     = source;
                     *messageOut = msg;
                 } break;
-                
-                default:
-                {
-                    return kInvalidValue;
-                } break;
             }
+        } break;
+
+
+        case kJobResult:
+        {
+            uint8 cookie[CookieLen];
+            if (ReceiveBytes(fd, CookieLen, (char*)cookie) != kSuccess)
+                return kSyscallFailed;
+            int state;
+            if (ReceiveBytes(fd, sizeof(int), (char*)&state) != kSuccess)
+                return kSyscallFailed;
+            double result;
+            if (ReceiveBytes(fd, sizeof(double), (char*)&result) != kSuccess)
+                return kSyscallFailed;
+            message *msg = malloc(sizeof(message));
+            msg->type = kJobResult;
+            msg->jobResult.result = result;
+            msg->jobResult.state  = state;
+            memcpy(msg->jobResult.cookie, cookie, CookieLen);
+            *messageOut = msg;
+        } break;
+
+        default:
+        {
+            return kInvalidValue;
         } break;
     }
 
