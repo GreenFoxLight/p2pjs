@@ -153,7 +153,7 @@ main(int argc, char **argv)
         }
     }
 
-    WriteToLog("Started with options: Port %s; First Peer: %s; Fork to Background: %s\n",
+    WriteToUser("Started with options: Port %s; First Peer: %s; Fork to Background: %s\n",
                port, (firstPeer) ? firstPeer : "<none>", (forkToBackground) ? "yes" : "no");
     
     if (forkToBackground)
@@ -190,12 +190,12 @@ main(int argc, char **argv)
     char localIp[PeerIPLen];
     if (GetLocalIPAddress(localIp, SizeofArray(localIp)) != kSuccess)
     {
-        WriteToLog("Failed to determine local ip address.\n");
+        WriteToUser("Failed to determine local ip address.\n");
         CloseLog();
         return 1;
     }
 
-    WriteToLog("Using %s as local ip.\n", localIp);
+    WriteToUser("Using %s as local ip.\n", localIp);
 
     int serverFd = OpenServerSocket(port);
     WriteToLog("Listening on %s\n", port);
@@ -262,7 +262,7 @@ main(int argc, char **argv)
             GetIPAddressString((struct sockaddr*)&clientAddress,
                                ipAddressString,
                                SizeofArray(ipAddressString));
-            WriteToLog("Got incoming connection from %s.\n", ipAddressString);
+            WriteToUser("Got incoming connection from %s.\n", ipAddressString);
 
             // NOTE(Kevin): Add to list of known peers 
             int id = AddPeer(clientFd, ipAddressString);
@@ -291,7 +291,7 @@ main(int argc, char **argv)
             } 
             for (unsigned int i = 0; i < closedPeerCount; ++i)
             {
-                WriteToLog("Peer %d [%s] has closed the connection.\n",
+                WriteToUser("Peer %d [%s] has closed the connection.\n",
                            closedPeers[i].id,
                            GetPeerIP(closedPeers[i].id));
                 // TODO(Kevin): Handle outstanding messages
@@ -338,7 +338,7 @@ main(int argc, char **argv)
 
                     default:
                     {
-                        WriteToLog("Unknown command %d\n", cmd->type);
+                        WriteToUser("Unknown command %d\n", cmd->type);
                     } break;
                 }
                 FreeCommand(cmd);

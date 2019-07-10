@@ -43,7 +43,7 @@ OpenLog(void)
 }
 
 internal void
-WriteToLog(const char *fmt, ...)
+WriteToLog_(bool32 toUser, const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
@@ -54,8 +54,14 @@ WriteToLog(const char *fmt, ...)
     {
         if (g_logFile)
         {
+            if (toUser)
+            {
+                vfprintf(stderr, fmt, ap);
+                va_start(ap, fmt);
+            }
             fprintf(g_logFile, "%s ", timeString);
             vfprintf(g_logFile, fmt, ap);
+            fflush(g_logFile);
         }
         else
         {
@@ -72,7 +78,13 @@ WriteToLog(const char *fmt, ...)
         strcat(messageFormat, fmt);
         if (g_logFile)
         {
+            if (toUser)
+            {
+                vfprintf(stderr, fmt, ap);
+                va_start(ap, fmt);
+            }
             vfprintf(g_logFile, messageFormat, ap);
+            fflush(g_logFile);
         }
         else
         {
@@ -82,6 +94,9 @@ WriteToLog(const char *fmt, ...)
     }
     va_end(ap);
 }
+
+#define WriteToLog(...) WriteToLog_(0, __VA_ARGS__)
+#define WriteToUser(...) WriteToLog_(1, __VA_ARGS__)
 
 internal void
 CloseLog(void)
