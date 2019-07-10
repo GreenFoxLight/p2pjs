@@ -23,8 +23,9 @@ GetLocalIPAddress(char *s, size_t maxLen)
             if (iface->ifa_addr->sa_family == AF_INET)
             {
                 if (strcmp(iface->ifa_name, "en0") == 0 ||
-                        strcmp(iface->ifa_name, "eth0") == 0 ||
-                        strcmp(iface->ifa_name, "wlan0") == 0)
+                    strcmp(iface->ifa_name, "eth0") == 0 ||
+                    strcmp(iface->ifa_name, "enp0s3") == 0 ||
+                    strcmp(iface->ifa_name, "wlan0") == 0)
                 {
                     if (GetIPAddressString(iface->ifa_addr, s, maxLen))
                     {
@@ -43,8 +44,9 @@ GetLocalIPAddress(char *s, size_t maxLen)
             if (!iface->ifa_addr)
                 continue;
             if (strcmp(iface->ifa_name, "en0") == 0 ||
-                    strcmp(iface->ifa_name, "eth0") == 0 ||
-                    strcmp(iface->ifa_name, "wlan0") == 0)
+                strcmp(iface->ifa_name, "eth0") == 0 ||
+                strcmp(iface->ifa_name, "enp0s3") == 0 ||
+                strcmp(iface->ifa_name, "wlan0") == 0)
             {
                 if (GetIPAddressString(iface->ifa_addr, s, maxLen))
                 {

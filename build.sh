@@ -1,6 +1,6 @@
 #!/bin/sh
 
-CFLAGS="-O0 -g -Wall -Wextra -Wpedantic -std=c11 -pthread -fsanitize=address -Iwren/src/include -Lwren/lib"
+CFLAGS="-O0 -g -Wall -Wextra -Wpedantic -std=c11 -pthread -Iwren/src/include -L." 
 OPTS=""
 
 CODE_HOME=`pwd`
@@ -10,12 +10,12 @@ then
     if [ ! -e wren/lib/libwren.a ];
     then
         cd wren && make -j 4;
-        rm $CODE_HOME/wren/lib/libwren.dylib
+        cp lib/libwren.a $CODE_HOME/libwren.a
         cd $CODE_HOME
     fi
 else
     echo "Make sure that you have the wren submodule!.";
 fi
 
-cc -o p2pjs p2pjs.c sha-256.c $CFLAGS $OPTS -lwren
+cc -o p2pjs p2pjs.c sha-256.c $CFLAGS $OPTS -lwren -lm
 
