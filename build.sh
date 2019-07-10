@@ -1,7 +1,7 @@
 #!/bin/sh
 
-CFLAGS="-O0 -g -Wall -Wextra -Wpedantic -std=c11 -pthread -Iwren/src/include -L." 
-OPTS=""
+CFLAGS="-O0 -g -Wall -Wextra -Wpedantic -std=c11 -fsanitize=address -pthread -Iwren/src/include -L." 
+OPTS="-DP2PJS_LOGTOSTDERR=0"
 
 CODE_HOME=`pwd`
 

@@ -75,15 +75,6 @@ enum
     kCmdQuit,
 };
 
-// Job flags
-enum
-{
-    // NOTE(Kevin): The job is given as c source code
-    kJobCSource = 0x00000001,
-
-    // TODO(Kevin): Others?
-};
-
 // NOTE(Kevin): SHA-256 Hashes are 32 byte
 #define CookieLen 32
 
@@ -107,7 +98,6 @@ typedef struct
 
         struct
         {
-            uint32      type; 
             uint8       cookie[CookieLen];
             peer_info   source;
         } queryJobResources;
@@ -120,16 +110,9 @@ typedef struct
         struct
         {
             uint8 cookie[CookieLen];
-            uint32 type;
-            union
-            {
-                struct
-                {
-                    double arg;
-                    uint32 sourceLen;
-                    char   *source;
-                } cSource;
-            };
+            double arg;
+            uint32 sourceLen;
+            char   source[1];
         } job;
 
         struct
@@ -167,6 +150,8 @@ enum
     kCompileError,
 
     kRuntimeError,
+
+    kUnknownMessageType,
 };
 
 
@@ -178,15 +163,8 @@ typedef struct
 
 typedef struct
 {
-    uint32 type;
-    union
-    {
-        struct
-        {
-            const char *source;
-            double arg;
-        } cSource;
-    };
+    const char *source;
+    double arg;
 } job;
 
 #endif

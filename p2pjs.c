@@ -27,7 +27,8 @@ ErrorToString(int error)
         "CouldNotOpenFile",
         "JobNotFound",
         "CompileError",
-        "RuntimeError"
+        "RuntimeError",
+        "UnknownMessageType",
     }; 
     return strings[error];
 }

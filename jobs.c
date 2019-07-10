@@ -74,7 +74,6 @@ EmitCSourceJob(const char *sourcePath,
         int c = fgetc(file);
         if (c != EOF)
         {
-            printf("%d ", c);
             source[sourceLength++] = (char)c; 
             if (sourceLength == sourceCapacity)
             {
@@ -94,9 +93,6 @@ EmitCSourceJob(const char *sourcePath,
     source[sourceLength] = '\0';
     fclose(file);
 
-    printf("%c\n", source[0]);
-    printf("%s\n", source);
-
     // NOTE(Kevin): Generate a random cookie
     uint32 random = (uint32)rand();
     uint8  cookie[CookieLen];
@@ -107,6 +103,7 @@ EmitCSourceJob(const char *sourcePath,
     strncpy(info.port, myPort, PeerPortLen);
 
     WriteToLog("Created job %s\n", CookieToTemporaryString(cookie));
+    printf("Created new job %.6s\n", CookieToTemporaryString(cookie));
 
     // NOTE(Kevin): Send a message asking for compute resources
     for (peer_iterator peer = GetFirstPeer(); !IsBehindLastPeer(&peer); GetNextPeer(&peer))
@@ -114,7 +111,7 @@ EmitCSourceJob(const char *sourcePath,
         WriteToLog("Sending queryJobResources message to peer %d [%s].\n",
                    peer.id,
                    GetPeerIP(peer.id));
-        if (SendQueryJobResources(peer.fd, kJobCSource, cookie, info) != kSuccess)
+        if (SendQueryJobResources(peer.fd, cookie, info) != kSuccess)
         {
             WriteToLog(" * Failed!\n");
         }
@@ -134,9 +131,8 @@ EmitCSourceJob(const char *sourcePath,
     }
     memcpy(g_emittedJobs[g_emittedJobCount].cookie, cookie, CookieLen);
     g_emittedJobs[g_emittedJobCount].state = kStateQuerySent;
-    g_emittedJobs[g_emittedJobCount].job.type = kJobCSource;
-    g_emittedJobs[g_emittedJobCount].job.cSource.source = source;
-    g_emittedJobs[g_emittedJobCount].job.cSource.arg    = arg;
+    g_emittedJobs[g_emittedJobCount].job.source = source;
+    g_emittedJobs[g_emittedJobCount].job.arg    = arg;
     ++g_emittedJobCount;
     return kSuccess;
 }
@@ -178,12 +174,12 @@ StoreJobResult(uint8 cookie[CookieLen], int state, double result)
                 // Here, we just print it out
                 if (state == kSuccess)
                 {
-                    printf("Job %s succeeded; Result is %lf\n",
+                    printf("Job %.6s succeeded; Result is %lf\n",
                            CookieToTemporaryString(cookie), result);
                 }
                 else
                 {
-                    printf("Job %s failed; Error was a %s\n",
+                    printf("Job %.6s failed; Error was a %s\n",
                            CookieToTemporaryString(cookie),
                            (state == kCompileError) ? "Compile Error" : "Runtime Error");
                 }
@@ -221,16 +217,13 @@ TakeJob(uint8 cookie[CookieLen], job theJob, int sourceId)
     g_receivedJobs[g_receivedJobCount].source = sourceId;
     g_receivedJobs[g_receivedJobCount].state  = kStateRunning;
     g_receivedJobs[g_receivedJobCount].job    = theJob;
-    if (theJob.type == kJobCSource)
+    char *source = malloc(strlen(theJob.source) + 1);
+    if (!source)
     {
-        char *source = malloc(strlen(theJob.cSource.source) + 1);
-        if (!source)
-        {
-            return kNoMemory;
-        } 
-        strcpy(source, theJob.cSource.source);
-        g_receivedJobs[g_receivedJobCount].job.cSource.source = source;
-    }
+        return kNoMemory;
+    } 
+    strcpy(source, theJob.source);
+    g_receivedJobs[g_receivedJobCount].job.source = source;
     ++g_receivedJobCount;
     return kSuccess;
 }
@@ -243,10 +236,10 @@ ExecuteNextJob(void)
     {
         WriteToLog("Running job: %s\n", CookieToTemporaryString(g_receivedJobs[idx].cookie));
 
-        WriteToLog("Argument is %lf\n", g_receivedJobs[idx].job.cSource.arg);
+        WriteToLog("Argument is %lf\n", g_receivedJobs[idx].job.arg);
         int result = RunCode(g_receivedJobs[idx].cookie,
-                             g_receivedJobs[idx].job.cSource.arg,
-                             g_receivedJobs[idx].job.cSource.source);
+                             g_receivedJobs[idx].job.arg,
+                             g_receivedJobs[idx].job.source);
         WriteToLog("Result: %lf [%s]\n", GetLastResult(), ErrorToString(result));
 
         SendJobResult(GetPeerFd(g_receivedJobs[idx].source),

@@ -14,7 +14,6 @@
 #endif
 
 global_variable FILE *g_logFile;
-//global_variable mutex g_logMutex;
 
 internal bool32 
 OpenLog(void)

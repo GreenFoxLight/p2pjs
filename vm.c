@@ -9,7 +9,6 @@ global_variable double g_jobResult;
 internal void
 SetResult(WrenVM *vm)
 {
-    printf("SetResult(%lf)\n", wrenGetSlotDouble(vm, 1));
     g_jobResult = wrenGetSlotDouble(vm, 1);
 }
 

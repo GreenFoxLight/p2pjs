@@ -300,7 +300,8 @@ internal void
 HandleMessageFromPeer(int fd, int id, const char *myPort)
 {
     message *message;
-    if (ReceiveMessage(fd, &message) == kSuccess)
+    int err;
+    if ((err = ReceiveMessage(fd, &message)) == kSuccess)
     {
         switch (message->type)
         {
@@ -421,7 +422,6 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
                         WriteToLog("Spreading to peer %d [%s].\n",
                                    peer.id, GetPeerIP(peer.id));
                         SendQueryJobResources(peer.fd,
-                                              message->queryJobResources.type,
                                               message->queryJobResources.cookie,
                                               message->queryJobResources.source);
                     }
@@ -447,13 +447,9 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
 
                 WriteToLog("Job has cookie %s\n", CookieToTemporaryString(message->job.cookie));
                 job theJob = {
-                    .type           = message->job.type,
-                    .cSource.source = message->job.cSource.source,
-                    .cSource.arg    = message->job.cSource.arg,
+                    .source = message->job.source,
+                    .arg    = message->job.arg,
                 };
-                printf("%d\n", message->job.cSource.sourceLen);
-                printf("%c\n", theJob.cSource.source[0]);
-                printf("%s\n", theJob.cSource.source);
 
                 int err;
                 if ((err = TakeJob(message->job.cookie, theJob, id)) != kSuccess)
@@ -481,6 +477,7 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
     }
     else
     {
-        WriteToLog("Receive message failed.\n");
+        if (err != kWouldBlock)
+            WriteToLog("Receive message failed: %s\n", ErrorToString(err));
     }
 }
