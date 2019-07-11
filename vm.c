@@ -6,12 +6,6 @@
 global_variable uint8 g_currentCookie[CookieLen];
 global_variable double g_jobResult;
 
-internal void
-SetResult(WrenVM *vm)
-{
-    g_jobResult = wrenGetSlotDouble(vm, 1);
-}
-
 internal double
 GetLastResult(void)
 {
@@ -121,16 +115,6 @@ BindForeignMethod(WrenVM *vm,
 {
     Unused(vm);
     Unused(isStatic);
-    if (strcmp(module, "p2pjs") == 0)
-    {
-        if (strcmp(class, "Interface") == 0)
-        {
-            if (strcmp(signature, "setResult(_)") == 0)
-            {
-                return SetResult;
-            }
-        }
-    }
     return 0;
 }
 
@@ -164,6 +148,7 @@ RunCode(uint8 cookie[CookieLen], double arg, const char *source)
     wrenSetSlotHandle(vm, 0, jobClass);
     wrenSetSlotDouble(vm, 1, arg);
     result = wrenCall(vm, runSignature);
+    g_jobResult = wrenGetSlotDouble(vm, 0);
 
     wrenReleaseHandle(vm, jobClass);
     wrenReleaseHandle(vm, runSignature);

@@ -234,13 +234,13 @@ ExecuteNextJob(void)
     int idx = (int)g_receivedJobCount - 1;
     if (idx >= 0)
     {
-        WriteToLog("Running job: %s\n", CookieToTemporaryString(g_receivedJobs[idx].cookie));
+        WriteToUser("Running job: %.6s\n", CookieToTemporaryString(g_receivedJobs[idx].cookie));
 
-        WriteToLog("Argument is %lf\n", g_receivedJobs[idx].job.arg);
+        WriteToUser("Argument is %lf\n", g_receivedJobs[idx].job.arg);
         int result = RunCode(g_receivedJobs[idx].cookie,
                              g_receivedJobs[idx].job.arg,
                              g_receivedJobs[idx].job.source);
-        WriteToLog("Result: %lf [%s]\n", GetLastResult(), ErrorToString(result));
+        WriteToUser("Result: %lf [%s]\n", GetLastResult(), ErrorToString(result));
 
         SendJobResult(GetPeerFd(g_receivedJobs[idx].source),
                       g_receivedJobs[idx].cookie,
