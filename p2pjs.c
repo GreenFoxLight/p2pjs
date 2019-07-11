@@ -312,7 +312,7 @@ main(int argc, char **argv)
             CloseLog();
             return 1;
         }
-        ConnectToPeer(ip, fpPort, port);
+        ConnectToPeer(ip, fpPort, port, 1);
     }
 
 

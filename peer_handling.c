@@ -234,7 +234,7 @@ CheckPeerStatus(ready_peer **readyPeersOut,
 }
 
 internal int 
-ConnectToPeer(const char *ip, const char *port, const char *myPort)
+ConnectToPeer(const char *ip, const char *port, const char *myPort, bool32 getPeerList)
 {
     struct addrinfo hints, *res;
     int peerFd = 0, peerId = -1;
@@ -263,14 +263,17 @@ ConnectToPeer(const char *ip, const char *port, const char *myPort)
                     RemovePeers(&forceClose, 1);
                 }
 
-                if (SendGetPeers(peerFd) != kSuccess)
+                if (getPeerList)
                 {
-                    WriteToLog("Failed to send getPeers message to peer %s : %s.\n", ip, port);
-                    close(peerFd);
-                    closed_peer forceClose;
-                    forceClose.fd = peerFd;
-                    forceClose.id = peerId;
-                    RemovePeers(&forceClose, 1);
+                    if (SendGetPeers(peerFd) != kSuccess)
+                    {
+                        WriteToLog("Failed to send getPeers message to peer %s : %s.\n", ip, port);
+                        close(peerFd);
+                        closed_peer forceClose;
+                        forceClose.fd = peerFd;
+                        forceClose.id = peerId;
+                        RemovePeers(&forceClose, 1);
+                    }
                 }
             }
         }
@@ -360,9 +363,10 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
                     if (id == -1)
                     {
                         // NOTE(Kevin): New peer
+                        bool32 getList = rand() % 2;
                         id = ConnectToPeer(message->peerList.peers[i].ipaddr,
                                            message->peerList.peers[i].port,
-                                           myPort);
+                                           myPort, getList);
                         if (id == -1)
                         {
                             WriteToLog("Failed to connect to peer %s %s\n",
@@ -393,7 +397,7 @@ HandleMessageFromPeer(int fd, int id, const char *myPort)
                         // NOTE(Kevin): New peer
                         id = ConnectToPeer(message->queryJobResources.source.ipaddr,
                                            message->queryJobResources.source.port,
-                                           myPort);
+                                           myPort, 0);
                         if (id == -1)
                         {
                             WriteToLog("Failed to connect to peer %s %s\n",
