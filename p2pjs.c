@@ -33,6 +33,10 @@ ErrorToString(int error)
     return strings[error];
 }
 
+internal const char *g_localIp;
+internal const char *g_localPort;
+internal int g_serverFd;
+
 #include "getlocalip.c"
 #include "logging.c"
 #include "vm.c"
@@ -114,6 +118,64 @@ OnExit(int s)
     g_shouldExit = 1;
 }
 
+internal void
+Frame(void)
+{
+    struct sockaddr_storage clientAddress;
+    socklen_t clientAddressSize = sizeof(clientAddress);
+    int clientFd = accept(g_serverFd, (struct sockaddr*)&clientAddress, &clientAddressSize);
+    if (clientFd != -1) {
+        char ipAddressString[INET6_ADDRSTRLEN];
+        GetIPAddressString((struct sockaddr*)&clientAddress,
+                ipAddressString,
+                SizeofArray(ipAddressString));
+        WriteToUser("Got incoming connection from %s.\n", ipAddressString);
+
+        // NOTE(Kevin): Add to list of known peers 
+        int id = AddPeer(clientFd, ipAddressString);
+        if (id > -1)
+        {
+            WriteToLog("Peer with ip %s got id %d.\n", ipAddressString, id);
+        }
+        else
+        {
+            WriteToLog("Failed to add to list of known peers.\n");
+        }
+    }
+
+    ready_peer *readyPeers;
+    closed_peer *closedPeers;
+    unsigned int readyPeerCount, closedPeerCount;
+    if (CheckPeerStatus(&readyPeers, &readyPeerCount,
+                &closedPeers, &closedPeerCount) == kSuccess)
+    {
+        for (unsigned int i = 0; i < readyPeerCount; ++i)
+        {
+            WriteToLog("Incoming data from peer %d [%s].\n",
+                    readyPeers[i].id,
+                    GetPeerIP(readyPeers[i].id));
+            HandleMessageFromPeer(readyPeers[i].fd, readyPeers[i].id, g_localPort);
+        } 
+        for (unsigned int i = 0; i < closedPeerCount; ++i)
+        {
+            WriteToUser("Peer %d [%s] has closed the connection.\n",
+                    closedPeers[i].id,
+                    GetPeerIP(closedPeers[i].id));
+            // TODO(Kevin): Handle outstanding messages
+            // We need a way to TRY to handle messages, because
+            // the message might be incomplete
+            close(closedPeers[i].fd);
+        }
+        RemovePeers(closedPeers, closedPeerCount);
+        free(readyPeers);
+        free(closedPeers);
+    }
+    else
+    {
+        WriteToLog("CheckPeerStatus() failed.\n"); 
+    }
+}
+
 int
 main(int argc, char **argv)
 {
@@ -122,8 +184,9 @@ main(int argc, char **argv)
     char *firstPeer = 0;
     // NOTE(Kevin): Parse command line arguments
     int option = '?';
+    char *scriptPath  = 0;
 
-    while ((option = getopt(argc, argv, "p:f:b")) != -1)
+    while ((option = getopt(argc, argv, "p:f:bs:")) != -1)
     {
         switch (option)
         {
@@ -145,11 +208,17 @@ main(int argc, char **argv)
                 // NOTE(Kevin): Fork to background
                 forkToBackground = 1;
             } break;
-            case '?':
+            case 's':
             {
-                printf("Usage: %s [-p port] [-f ip#port] [-b]\n", argv[0]);
+                scriptPath = malloc(strlen(optarg) + 1);
+                strcpy(scriptPath, optarg);
+            } break;
+            case '?':
+            default:
+            {
+                printf("Usage: %s [-p port] [-f ip#port] [-s path] [-b]\n", argv[0]);
                 return 1;
-            }
+            } break;
         }
     }
 
@@ -196,6 +265,9 @@ main(int argc, char **argv)
     }
 
     WriteToUser("Using %s as local ip.\n", localIp);
+    
+    g_localPort = port; 
+    g_localIp = localIp;
 
     int serverFd = OpenServerSocket(port);
     WriteToLog("Listening on %s\n", port);
@@ -205,6 +277,7 @@ main(int argc, char **argv)
         CloseLog();
         return 1;
     }
+    g_serverFd = serverFd;
 
     if (firstPeer)
     {
@@ -242,117 +315,77 @@ main(int argc, char **argv)
         ConnectToPeer(ip, fpPort, port);
     }
 
-    if (!forkToBackground) {
-        if (StartUIThread() != kSuccess)
-        {
-            WriteToLog("Failed to start ui thread.\n");
-            close(serverFd);
-            CloseLog();
-            return 1;
-        }
-    }
 
-    while (!g_shouldExit)
+    if (scriptPath)
     {
-        struct sockaddr_storage clientAddress;
-        socklen_t clientAddressSize = sizeof(clientAddress);
-        int clientFd = accept(serverFd, (struct sockaddr*)&clientAddress, &clientAddressSize);
-        if (clientFd != -1) {
-            char ipAddressString[INET6_ADDRSTRLEN];
-            GetIPAddressString((struct sockaddr*)&clientAddress,
-                               ipAddressString,
-                               SizeofArray(ipAddressString));
-            WriteToUser("Got incoming connection from %s.\n", ipAddressString);
-
-            // NOTE(Kevin): Add to list of known peers 
-            int id = AddPeer(clientFd, ipAddressString);
-            if (id > -1)
+        WriteToUser("Executing script %s\n", scriptPath);
+        int result = RunScript(scriptPath); 
+        WriteToUser("Result: %s\n", ErrorToString(result));
+    }
+    else
+    {
+        if (!forkToBackground) {
+            if (StartUIThread() != kSuccess)
             {
-                WriteToLog("Peer with ip %s got id %d.\n", ipAddressString, id);
-            }
-            else
-            {
-                WriteToLog("Failed to add to list of known peers.\n");
+                WriteToLog("Failed to start ui thread.\n");
+                close(serverFd);
+                CloseLog();
+                return 1;
             }
         }
 
-        ready_peer *readyPeers;
-        closed_peer *closedPeers;
-        unsigned int readyPeerCount, closedPeerCount;
-        if (CheckPeerStatus(&readyPeers, &readyPeerCount,
-                            &closedPeers, &closedPeerCount) == kSuccess)
+        while (!g_shouldExit)
         {
-            for (unsigned int i = 0; i < readyPeerCount; ++i)
+            Frame();
+
+            if (!forkToBackground)
             {
-                WriteToLog("Incoming data from peer %d [%s].\n",
-                           readyPeers[i].id,
-                           GetPeerIP(readyPeers[i].id));
-                HandleMessageFromPeer(readyPeers[i].fd, readyPeers[i].id, port);
+                user_command *cmd = GetNextCommand();
+                if (cmd)
+                {
+                    switch (cmd->type)
+                    {
+                        case kCmdJobCSource:
+                        {
+                            WriteToLog("CSOURCE COMMAND %s\n", cmd->cSource.path);
+                            int result = EmitCSourceJob(cmd->cSource.path,
+                                        cmd->cSource.arg,
+                                        localIp, port, 0);
+                            if (result == kCouldNotOpenFile)
+                            {
+                                printf("Could not read file %s\n", cmd->cSource.path);
+                            }
+                            else if (result == kNoMemory)
+                            {
+                                printf("Not enough memory!\n");
+                            }
+                        } break;
+
+                        case kCmdQuit:
+                        {
+                            g_shouldExit = 1;
+                        } break;
+
+                        default:
+                        {
+                            WriteToUser("Unknown command %d\n", cmd->type);
+                        } break;
+                    }
+                    FreeCommand(cmd);
+                }
             } 
-            for (unsigned int i = 0; i < closedPeerCount; ++i)
-            {
-                WriteToUser("Peer %d [%s] has closed the connection.\n",
-                           closedPeers[i].id,
-                           GetPeerIP(closedPeers[i].id));
-                // TODO(Kevin): Handle outstanding messages
-                // We need a way to TRY to handle messages, because
-                // the message might be incomplete
-                close(closedPeers[i].fd);
-            }
-            RemovePeers(closedPeers, closedPeerCount);
-            free(readyPeers);
-            free(closedPeers);
-        }
-        else
-        {
-            WriteToLog("CheckPeerStatus() failed.\n"); 
+            
+            ExecuteNextJob();
         }
 
         if (!forkToBackground)
         {
-            user_command *cmd = GetNextCommand();
-            if (cmd)
-            {
-                switch (cmd->type)
-                {
-                    case kCmdJobCSource:
-                    {
-                        WriteToLog("CSOURCE COMMAND %s\n", cmd->cSource.path);
-                        int result = EmitCSourceJob(cmd->cSource.path,
-                                                    cmd->cSource.arg,
-                                                    localIp, port);
-                        if (result == kCouldNotOpenFile)
-                        {
-                            printf("Could not read file %s\n", cmd->cSource.path);
-                        }
-                        else if (result == kNoMemory)
-                        {
-                            printf("Not enough memory!\n");
-                        }
-                    } break;
-
-                    case kCmdQuit:
-                    {
-                        g_shouldExit = 1;
-                    } break;
-
-                    default:
-                    {
-                        WriteToUser("Unknown command %d\n", cmd->type);
-                    } break;
-                }
-                FreeCommand(cmd);
-            }
-        } 
-    
-        ExecuteNextJob();
+            StopUIThread();
+        }
     }
 
     close(serverFd);
-    if (!forkToBackground)
-    {
-        StopUIThread();
-    }
+
 
     CloseLog();
 

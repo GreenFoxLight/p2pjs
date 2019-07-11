@@ -22,6 +22,7 @@ Ansonsten stehen folgende Parameter zur Verfügung:
 | `-p`      | Port auf dem nach eingehenden Verbindungen gelauscht wird. Standard: 2096 |
 | `-f`      | First-Peer. IP-Adresse und Port des ersten Peers mit dem sich verbunden wird. Muss ein String der Form `ip#port` sein. Standard: Leer |
 | `-b`      | Fork-To-Background. Startet das Programm als Daemon im Hintergrund. Standard: Aus |
+| `-s`      | Führe ein Skript aus. Muss der Pfad zu einem wren Skript sein. Standard: Aus |
 
 ## Benutzte Bibliotheken
 

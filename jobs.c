@@ -26,6 +26,7 @@ typedef struct
 {
     uint8       cookie[CookieLen];
     int         state; 
+    double      result;
     job         job;
 } emitted_job;
 
@@ -54,7 +55,8 @@ CookieToTemporaryString(uint8 cookie[CookieLen])
 internal int 
 EmitCSourceJob(const char *sourcePath,
                double arg,
-               const char *myIp, const char *myPort)
+               const char *myIp, const char *myPort,
+               uint8 cookieOut[CookieLen])
 {
     FILE *file = fopen(sourcePath, "r");
     if (!file)
@@ -134,6 +136,8 @@ EmitCSourceJob(const char *sourcePath,
     g_emittedJobs[g_emittedJobCount].job.source = source;
     g_emittedJobs[g_emittedJobCount].job.arg    = arg;
     ++g_emittedJobCount;
+    if (cookieOut)
+        memcpy(cookieOut, cookie, CookieLen);
     return kSuccess;
 }
 
@@ -170,6 +174,7 @@ StoreJobResult(uint8 cookie[CookieLen], int state, double result)
             if (g_emittedJobs[i].state == kStateRunning)
             {
                 g_emittedJobs[i].state = kStateFinished;
+                g_emittedJobs[i].result = result;
                 // TODO(Kevin): In a real system, we would now do something with the result
                 // Here, we just print it out
                 if (state == kSuccess)
@@ -187,6 +192,44 @@ StoreJobResult(uint8 cookie[CookieLen], int state, double result)
         }
     }
     return kJobNotFound;
+}
+
+internal int
+GetNumberOfOutstandingJobs(void)
+{
+    int count = 0;
+    for (unsigned int i = 0; i < g_emittedJobCount; ++i)
+    {
+        if (g_emittedJobs[i].state != kStateFinished)
+            ++count;
+    }
+    return count;
+}
+
+internal bool32
+IsJobFinished(uint8 cookie[CookieLen])
+{
+    for (unsigned int i = 0; i < g_emittedJobCount; ++i)
+    {
+        if (memcmp(g_emittedJobs[i].cookie, cookie, CookieLen) == 0)
+        {
+            return g_emittedJobs[i].state == kStateFinished;
+        }
+    }
+    return 0;
+}
+
+internal double 
+GetJobResult(uint8 cookie[CookieLen])
+{
+    for (unsigned int i = 0; i < g_emittedJobCount; ++i)
+    {
+        if (memcmp(g_emittedJobs[i].cookie, cookie, CookieLen) == 0)
+        {
+            return g_emittedJobs[i].result;
+        }
+    }
+    return 0;
 }
 
 internal int
