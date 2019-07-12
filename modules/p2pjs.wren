@@ -1,23 +1,23 @@
 foreign class Job {
     construct launch(path, arg) {} 
 
-    foreign isFinished()
+    foreign isFinished
 
-    foreign getResult()
+    foreign result 
     
-    foreign getArgument()
+    foreign arg
 
     toString {
-        if (isFinished()) {
-            return getArgument().toString + ": " + getResult().toString
+        if (isFinished) {
+            return arg.toString + ": " + result.toString
         } else {
-            return getArgument().toString + ": " + "<Still running>"
+            return arg.toString + ": " + "<Still running>"
         }
     }
 }
 
 class Interface {
-    foreign static getNumberOfOutstandingJobs()
+    foreign static numberOfOutstandingJobs
 
     foreign static idle()
 }

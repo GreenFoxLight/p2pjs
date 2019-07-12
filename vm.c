@@ -219,22 +219,22 @@ BindForeignMethod(WrenVM *vm,
     {
         if (strcmp(class, "Job") == 0)
         {
-            if (!isStatic && strcmp(signature, "isFinished()") == 0)
+            if (!isStatic && strcmp(signature, "isFinished") == 0)
             {
                 return JobIsFinished;
             }
-            else if (!isStatic && strcmp(signature, "getResult()") == 0)
+            else if (!isStatic && strcmp(signature, "result") == 0)
             {
                 return JobGetResult;
             }
-            else if (!isStatic && strcmp(signature, "getArgument()") == 0)
+            else if (!isStatic && strcmp(signature, "arg") == 0)
             {
                 return JobGetArgument;
             }
         }
         else if (strcmp(class, "Interface") == 0)
         {
-            if (isStatic && strcmp(signature, "getNumberOfOutstandingJobs()") == 0)
+            if (isStatic && strcmp(signature, "numberOfOutstandingJobs") == 0)
             {
                 return InterfaceGetNumberOfOutstandingJobs;
             }
